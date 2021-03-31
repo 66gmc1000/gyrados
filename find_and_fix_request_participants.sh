@@ -6,12 +6,9 @@ source jira_utils.sh
 # default_sprint_id=1
 
 echo "Looking up custom field ids needed"
-# auto_clone_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Auto clone this issue") | .id')"
+# req_participants_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Auto clone this issue") | .id')"
 # sprint_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Sprint") | .id')"
 req_participants_custom_field_id="$(cloudgetapi2 field | jq -r '.[] | select(.name == "Request participants") | .id')"
-
-# get issues with request participants
-$issues_to_fix=
 
 # # https://confluence.atlassian.com/jirakb/creating-an-issue-in-a-sprint-using-the-jira-rest-api-875321726.html
 # sprint_custom_field_id="$(echo "$issue_json_data" \
@@ -23,27 +20,28 @@ $issues_to_fix=
 #     | .key')"
 
 # Find all issues where "Auto clone this issue" != null
-issue_key_list=$(getapi2 search?jql=%22Auto%20clone%20this%20issue%22%21%3Dnull | jq -r '.issues[].key' | sort -n)
+issue_key_list=$(cloudgetapi2 search?jql=%22Request%20participants%22%21%3Dnull | jq -r '.issues[].key' | sort -n)
 
-# print state of each autoclone issue and list of linked issues in each ticket.
-for cloneable_issue_key in $issue_key_list; do
-  echo "Found cloneable issue: $cloneable_issue_key"
-  cloneable_info="$(getapi2 issue/$cloneable_issue_key?fields=$auto_clone_custom_field_id,key,project,sprint,board,issuelinks,status)"
-  cloneable_option="$(echo "$cloneable_info" | jq -r --arg auto_clone_custom_field_id "$auto_clone_custom_field_id" '.fields[$auto_clone_custom_field_id].value')"
+# print state of each issue and list of participants in each ticket.
+for issue_key in $issue_key_list; do
+  echo "Found issue with participants: $issue_key"
+  cloneable_info="$(cloudgetapi2 issue/$issue_key?fields=$req_participants_custom_field_id)"
+  cloneable_option="$(echo "$cloneable_info" | jq -r --arg req_participants_custom_field_id "$req_participants_custom_field_id" '.fields[$req_participants_custom_field_id].displayName')"
   cloneable_status="$(echo "$cloneable_info" | jq -r '.fields.status.statusCategory.key')"
-  if [ "$cloneable_option" = "Never" ]; then
-    # note that default of None returns null, and we are finding all the not-null entries
-    continue
-  fi
+  # if [ "$cloneable_option" = "Never" ]; then
+    note that default of None returns null, and we are finding all the not-null entries
+    # continue
+  # fi
   # get "Cloners" issue links for the cloneable, see if any of the clones are active (todo or in progress)
-  linked_key_list="$(echo "$cloneable_info" | jq -r '.fields.issuelinks[] | select(.type.name == "Cloners") | .inwardIssue.key')"
+  # linked_key_list="$(echo "$cloneable_info" | jq -r '.fields.issuelinks[] | select(.type.name == "Cloners") | .inwardIssue.key')"
   echo "Found linked \"is cloned by\" the following issues"
   echo "$linked_key_list"
+done
 
   # if issue links are empty or they are all done, then proceed with cloning the issue
   all_linked_issues_closed=true
   if [ "$cloneable_status" != "done" ]; then
-  echo "Cloneable issue is not marked done.  Giving up on cloning $cloneable_issue_key"
+  echo "Cloneable issue is not marked done.  Giving up on cloning $issue_key"
     continue
   fi
   echo "Checking progress of linked issues"
@@ -60,7 +58,7 @@ for cloneable_issue_key in $issue_key_list; do
     # todo aka new
     # closed aka done
     if [ $status != "done" ] ; then
-      echo "Found a linked issue not in a done state; giving up on cloning $cloneable_issue_key"
+      echo "Found a linked issue not in a done state; giving up on cloning $issue_key"
             all_linked_issues_closed=false
       pause
       break;
@@ -71,7 +69,7 @@ for cloneable_issue_key in $issue_key_list; do
     # Make a new clone!
         echo "All cloned issues are currently closed... creating a new clone..."
   pause
-    issue_json_data="$(getapi2 issue/$cloneable_issue_key | jq -r '.')"
+    issue_json_data="$(getapi2 issue/$issue_key | jq -r '.')"
   board_id=$(echo "$issue_json_data" | jq -r '.fields.sprint.originBoardId')
   project_id=$(echo "$issue_json_data" | jq -r '.fields.project.id')
   sprint_id=$(echo "$issue_json_data" | jq -r '.fields.sprint.id')
@@ -96,9 +94,9 @@ for cloneable_issue_key in $issue_key_list; do
 
   # deny list additions
   echo "Creating initial clone json data"
-  json_data="$(getapi2 issue/$cloneable_issue_key \
+  json_data="$(getapi2 issue/$issue_key \
   | ./jq-linux64 'delpaths([path(..?) as $p | select(getpath($p) == null) | $p])' \
-  | ./jq-linux64 -r --arg auto_clone_custom_field_id $auto_clone_custom_field_id \
+  | ./jq-linux64 -r --arg req_participants_custom_field_id $req_participants_custom_field_id \
         'delpaths([["fields","comment"],
             ["fields","id"],
             ["fields","self"],
@@ -127,7 +125,7 @@ for cloneable_issue_key in $issue_key_list; do
             ["fields","worklog"],
             ["fields","status"],
             ["fields","sprint"],
-            ["fields", $auto_clone_custom_field_id ]
+            ["fields", $req_participants_custom_field_id ]
                         ])')"
   echo "Adding sprint, and project to the json data"
   json_data_with_additions=$(echo "$json_data" | jq -r --arg sprint_id "$sprint_id" \
@@ -150,8 +148,8 @@ for cloneable_issue_key in $issue_key_list; do
 
   # Link back to the cloneable
   echo "Linking cloneable to the clone"
-  echo "      $clone_issue_key clones $cloneable_issue_key"
-  echo "  aka $cloneable_issue_key is cloned by $clone_issue_key"
+  echo "      $clone_issue_key clones $issue_key"
+  echo "  aka $issue_key is cloned by $clone_issue_key"
   json_data="$(cat << HEREDOC
   {
     "type": {
@@ -161,7 +159,7 @@ for cloneable_issue_key in $issue_key_list; do
       "key": "$clone_issue_key"
     },
     "outwardIssue": {
-      "key": "$cloneable_issue_key"
+      "key": "$issue_key"
     }
   }
 HEREDOC
@@ -169,7 +167,7 @@ HEREDOC
   issue_link_resp="$(postapi2 issueLink "$json_data")"
   echo "$issue_link_resp" | jq -r '.'
 
-  echo "Marking cloneable $cloneable_issue_key with a comment of what has happened"
+  echo "Marking cloneable $issue_key with a comment of what has happened"
 
   json_data="$(cat << HEREDOC
   {
@@ -177,9 +175,9 @@ HEREDOC
   }
 HEREDOC
   )"
-  comment_resp="$(postapi2 issue/$cloneable_issue_key/comment "$json_data")"
+  comment_resp="$(postapi2 issue/$issue_key/comment "$json_data")"
   echo "$comment_resp" | jq -r '. | {body,created}'
 
   echo -e "/n/nDone cloning a jira issue"
   fi
-done # end of cloneable_issue_key
+done # end of issue_key
