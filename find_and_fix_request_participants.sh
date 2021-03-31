@@ -2,12 +2,17 @@
 
 source jira_utils.sh
 
-default_board="TRAC"
-default_sprint_id=1
+# default_board="TRAC"
+# default_sprint_id=1
 
 echo "Looking up custom field ids needed"
-auto_clone_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Auto clone this issue") | .id')"
-sprint_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Sprint") | .id')"
+# auto_clone_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Auto clone this issue") | .id')"
+# sprint_custom_field_id="$(getapi2 field | jq -r '.[] | select(.name == "Sprint") | .id')"
+req_participants_custom_field_id="$(cloudgetapi2 field | jq -r '.[] | select(.name == "Request participants") | .id')"
+
+# get issues with request participants
+$issues_to_fix=
+
 # # https://confluence.atlassian.com/jirakb/creating-an-issue-in-a-sprint-using-the-jira-rest-api-875321726.html
 # sprint_custom_field_id="$(echo "$issue_json_data" \
 #   | ./jq-linux64 -r '.fields | to_entries[]

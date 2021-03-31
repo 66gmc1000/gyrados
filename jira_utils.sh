@@ -3,17 +3,17 @@
 # Leaving auth credentials in plain text or even in base64 encoding is not secure.  
 # Consider heavily restricting access to this script and make it execute only, without read, or switching to the stronger OAuth approach
 # At a minimum only store the base64 version of the combination
-cloudusername=Ian.Ovenell@wecu.com
-cloudpassword=Qk5VrEE5ojA5gyB3tFse9F28
-cloudauth="$(echo -n "$username:$password" | base64 )"
+cloudusername='Ian.Ovenell@wecu.com'
+cloudpassword='Qk5VrEE5ojA5gyB3tFse9F28'
+cloudauth="$(echo -n "$cloudusername:$cloudpassword")"
 
-cloudurl=wecu.atlassian.net
+cloudurl='wecu.atlassian.net'
 
-serverusername=Ian.Ovenell@wecu.com
-serverpassword=Qk5VrEE5ojA5gyB3tFse9F28
-serverauth="$(echo -n "$username:$password" | base64 )"
+serverusername='Ian.Ovenell@wecu.com'
+serverpassword='Qk5VrEE5ojA5gyB3tFse9F28'
+serverauth="$(echo -n "$serverusername:$serverpassword" | base64 )"
 
-serverurl=helpdesk.wecu.com
+serverurl='helpdesk.wecu.com'
 
 function pause(){
   read -n 1 -r -s -p $'Press enter to continue...\n'
@@ -28,7 +28,7 @@ function pause(){
 function cloudgetapi2(){
   api_path="$1"
   query="$2"
-  curl -sb -D- -H "Authorization: Basic $cloudauth" \
+  curl --user "$cloudauth" \
 	  -X GET -H 'Content-Type: application/json' \
 	  https://$cloudurl/rest/api/2/$api_path$query
 }
